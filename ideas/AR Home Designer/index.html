@@ -1,30 +1,110 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Home Designer - Diseña con AR</title>
-    <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
-    <!-- Three.js y loaders -->
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="app.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AR Home Designer</title>
+  <style>
+    body { margin:0; overflow:hidden; background:#000; font-family:Arial; color:white; }
+    #start { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:100; padding:20px 40px; font-size:20px; background:#0066ff; border:none; border-radius:12px; color:white; }
+    #menu { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:15px; border-radius:12px; z-index:100; display:none; }
+    button { margin:5px; padding:12px; background:#0066ff; border:none; border-radius:8px; color:white; }
+    #info { position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:10px; border-radius:8px; z-index:100; display:none; }
+  </style>
 </head>
 <body>
-    <!-- Botón para iniciar AR -->
-    <a id="enter-ar" class="mdc-button mdc-button--raised mdc-button--accent">Iniciar AR Home Designer</a>
-    
-    <!-- Menú de selección de muebles (se muestra en AR) -->
-    <div id="furniture-menu" class="menu hidden">
-        <h3>Elige un mueble</h3>
-        <button class="mdc-button" onclick="selectModel('chair')">Sillón</button>
-        <button class="mdc-button" onclick="selectModel('lamp')">Lámpara</button>
-        <button class="mdc-button" onclick="selectModel('table')">Mesa</button>
-    </div>
-    
-    <!-- Estabilización (se muestra cuando AR está listo) -->
-    <div id="stabilization" class="hidden">AR listo. Apunta a una superficie plana.</div>
+  <button id="start">Iniciar AR Home Designer</button>
+  <div id="info">Buscando superficie… mueve el móvil</div>
+  <div id="menu">
+    <button onclick="sel='chair'">Sillón</button>
+    <button onclick="sel='lamp'">Lámpara</button>
+    <button onclick="sel='table'">Mesa</button>
+  </div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script>
+    let sel = 'chair';
+    let scene, camera, renderer, reticle;
+    let models = {};
+    let controller;
+
+    const startBtn = document.getElementById('start');
+    const menu = document.getElementById('menu');
+    const info = document.getElementById('info');
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+      renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      // Luz
+      scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+
+      // Reticle (círculo blanco)
+      const ring = new THREE.RingGeometry(0.08, 0.11, 32).rotateX(-Math.PI/2);
+      const mat = new THREE.MeshBasicMaterial({color:0xffffff});
+      reticle = new THREE.Mesh(ring, mat);
+      reticle.visible = false;
+      scene.add(reticle);
+
+      // Cargar modelos
+      const loader = new THREE.GLTFLoader();
+      loader.load('https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf', g=>models.chair=g.scene);
+      loader.load('https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Lantern/glTF/Lantern.gltf', g=>{models.lamp=g.scene; g.scene.scale.set(0.3,0.3,0.3);});
+      loader.load('https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Avocado/glTF/Avocado.gltf', g=>{models.table=g.scene; g.scene.scale.set(6,6,6);});
+
+      startBtn.addEventListener('click', startAR);
+      window.addEventListener('resize', ()=>renderer.setSize(window.innerWidth, window.innerHeight));
+    }
+
+    async function startAR() {
+      if (!navigator.xr) return alert("Tu navegador no soporta WebXR");
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: {root: document.body}
+      });
+
+      renderer.xr.setReferenceSpaceType('local');
+      await renderer.xr.setSession(session);
+      startBtn.style.display = 'none';
+      menu.style.display = 'block';
+      info.style.display = 'block';
+
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', placeObject);
+      scene.add(controller);
+
+      let hitTestSource = null;
+      const viewerSpace = await session.requestReferenceSpace('viewer');
+      hitTestSource = await session.requestHitTestSource({space: viewerSpace});
+
+      renderer.setAnimationLoop((t, frame)=>{
+        if (!frame) return;
+        const results = frame.getHitTestResults(hitTestSource);
+        if (results.length) {
+          const hit = results[0];
+          const pose = hit.getPose(renderer.xr.getReferenceSpace());
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
+        } else reticle.visible = false;
+        renderer.render(scene, camera);
+      });
+    }
+
+    function placeObject() {
+      if (!reticle.visible || !models[sel]) return;
+      const obj = models[sel].clone();
+      obj.position.setFromMatrixPosition(reticle.matrix);
+      scene.add(obj);
+    }
+
+    init();
+  </script>
 </body>
 </html>
