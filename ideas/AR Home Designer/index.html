@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Home Designer - Diseña con AR</title>
+    <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
+    <!-- Three.js y loaders -->
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="app.js"></script>
+</head>
+<body>
+    <!-- Botón para iniciar AR -->
+    <a id="enter-ar" class="mdc-button mdc-button--raised mdc-button--accent">Iniciar AR Home Designer</a>
+    
+    <!-- Menú de selección de muebles (se muestra en AR) -->
+    <div id="furniture-menu" class="menu hidden">
+        <h3>Elige un mueble</h3>
+        <button class="mdc-button" onclick="selectModel('chair')">Sillón</button>
+        <button class="mdc-button" onclick="selectModel('lamp')">Lámpara</button>
+        <button class="mdc-button" onclick="selectModel('table')">Mesa</button>
+    </div>
+    
+    <!-- Estabilización (se muestra cuando AR está listo) -->
+    <div id="stabilization" class="hidden">AR listo. Apunta a una superficie plana.</div>
+</body>
+</html>
